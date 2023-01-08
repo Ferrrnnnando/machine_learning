@@ -1,7 +1,9 @@
 .DS_Store
 .ipynb_checkpoints
 **/[Dd]ata*
-**/[Mm]odel*
-**/[Ii]mage*
+**/[Mm]odel
+**/[Mm]odels
+**/[Ii]mage
+**/[Ii]mages
 **/__pycache__
 *.egg-info
