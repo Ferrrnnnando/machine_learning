@@ -30,7 +30,8 @@ from sklearn.base import BaseEstimator, TransformerMixin
 # Others
 from collections import Counter
 
-
+def printHello():
+    print('Hello! I am helper modules')
 
 def save_fig(folder_path, fig_id, tight_layout=True, fig_extension="png", resolution=300):
     # os.makedirs(folder_path, exist_ok=True)
