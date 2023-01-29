@@ -2,7 +2,9 @@
 
 ## Introduction
 ### 1. Competition
-This folder contains kernels for different competition projects, e.g. Kaggle.
+This folder contains kernels for different competition projects.
+
+- [Kaggle](competitions/kaggle/README.md)
 
 ### 2. Docs
 This folder contains documentation.
