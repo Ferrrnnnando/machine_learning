@@ -1,111 +1,11 @@
-import os
-
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import json
-
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.pipeline import make_pipeline
-
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OrdinalEncoder
-from sklearn.preprocessing import OneHotEncoder
-
-# Data scaling
-from sklearn.preprocessing import StandardScaler
-
-# Model
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LinearRegression
-
-# Evaluation
-from sklearn.metrics import mean_squared_error
 
 # Libraries for custom Transformer
 from sklearn.base import BaseEstimator, TransformerMixin
 
-# Others
-from collections import Counter
 
-
-# High Cardinality Transformer: perform one-hot transformer for high-cardinality
-# columns while avoiding generating too much dummpy features. It will only one-hot
-# the classes with high proportion. A threshold can be set.
-
-
-def cumulatively_categorise(column, threshold=0.85, return_categories_list=True):
-    # Find the threshold value using the percentage and number of instances in the column
-    threshold_value = int(threshold * len(column))
-    # Initialise an empty list for our new minimised categories
-    categories_list = []
-    # Initialise a variable to calculate the sum of frequencies
-    s = 0
-    # Create a counter dictionary of the form unique_value: frequency
-    counts = Counter(column)
-
-    # Loop through the category name and its corresponding frequency after sorting the categories by descending order of frequency
-    for i, j in counts.most_common():
-        # Add the frequency to the global sum
-        s += dict(counts)[i]
-        # Append the category name to the list
-        categories_list.append(i)
-        # Check if the global sum has reached the threshold value, if so break the loop
-        if s >= threshold_value:
-            break
-    # Append the category Other to the list
-    categories_list.append("Other")
-
-    # Replace all instances not in our new categories by Other
-    new_column = column.apply(lambda x: x if x in categories_list else "Other")
-
-    # Return transformed column and unique values if return_categories=True
-    if return_categories_list:
-        return new_column, categories_list
-    # Return only the transformed column if return_categories=False
-    else:
-        return new_column
-
-
-class HighCardAggregation(BaseEstimator, TransformerMixin):
-    def __init__(self, high_card_cols):
-        self.cols = high_card_cols
-
-    def fit(self, X, y=None):
-        return self
-
-    def transform(self, X, y=None):
-        # X is a numpy array, the columns to with high cardinality
-        X_ = X.copy()
-        X_df = pd.DataFrame(X, columns=self.cols)
-
-        for col in self.cols:
-            # transformed_columns is a pandas dataframe
-            transformed_column, trans_list = cumulatively_categorise(column=X_df[col])
-            X_ = np.c_[X_, transformed_column.to_numpy()]
-
-        X_ = np.delete(X_, [i for i in range(len(self.cols))], 1)
-        return X_
-
-class AddDelFeatureBase(BaseEstimator, TransformerMixin):
-    def __init__(self, all_cols, num_cols, cat_cols):
-        self.all_cols = all_cols
-        self.num_cols = num_cols
-        self.cat_cols = cat_cols
-
-    def fit(self, X, y=None):
-        return self
-    
-    def drop(self, X_df, cols):
-        X_df.drop(cols, axis=1, inplace=True)
-        
-    def dataFrameAstype(self, X_df):
-        X_df[self.num_cols].astype('float64')
-    
-    def transform(self, X, y=None):
-        raise NotImplementedError("Please rewrite transform method")
+# Helper functions
+from utils.helper import pipelinetools_helper
 
 
 class Debug(BaseEstimator, TransformerMixin):
@@ -114,97 +14,150 @@ class Debug(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         return self
-        
+
     def transform(self, X, y=None):
         print("------------------------")
         print(f"[Debug: {self.debugMsg}] X:\n", X)
         return X
-    
 
-class FullPipeline:
-    def __init__(
-        self,
-        add_feat_pipe,
-        num_cols,
-        cat_cols,
-        feat_num_cols,
-        feat_cat_cols,
-        low_card_cols,
-        high_card_cols,
-    ):
 
-        self.num_cols = num_cols  # contains label
-        self.cat_cols = cat_cols
-        self.feat_num_cols = feat_num_cols
-        self.feat_cat_cols = feat_cat_cols
-        self.low_card_cols = low_card_cols
-        self.high_card_cols = high_card_cols
+### Date Cleaning Transformers ###
+class AddColnamesTrans(BaseEstimator, TransformerMixin):
+    def __init__(self, colnames):
+        self.colnames = colnames
 
-        print("Here no error")
-        self.high_card_agg = HighCardAggregation(self.high_card_cols)
-        self.add_feat = add_feat_pipe
+    def fit(self, X, y=None):
+        print("[AddColnames]: fit()")
+        return self
 
-        # TODO: add self.data_parser
-        # self.data_parser = None
+    def transform(self, X, y=None):
+        print("[AddColnames]: transform()")
+        return pd.DataFrame(X, columns=self.colnames)
 
-        # Low cardinality columns
-        self.low_card_pipe = Pipeline(
-            steps=[("onehot", OneHotEncoder(handle_unknown="ignore", sparse=False))]
-        )
 
-        # High cardinality columns
-        self.high_card_pipe = Pipeline(
-            steps=[
-                ("aggregation", self.high_card_agg),
-                ("ordinal", OrdinalEncoder())  # 0.8339
-                # ('onehot', OneHotEncoder(handle_unknown='ignore', sparse=False))  # 0.82
-            ]
-        )
+class AstypeTrans(BaseEstimator, TransformerMixin):
+    def __init__(self, col_type_dict={}):
+        self.col_type_dict = col_type_dict
 
-        # Categorical transformers
-        self.cat_trans = ColumnTransformer(
-            transformers=[
-                ("low_card_pipeline", self.low_card_pipe, self.low_card_cols),
-                ("high_card_pipeline", self.high_card_pipe, self.high_card_cols),
-            ]
-        )
+    def fit(self, X, y=None):
+        print("[AstypeTrans]: fit()")
+        return self
 
-        # Numerical transformer
-        self.num_trans = Pipeline(steps=[("std_scaler", StandardScaler())])
+    def transform(self, X, y=None):
+        ### Do not change this ###
+        print("[AstypeTrans]: transform()")
 
-        # Numerical & Categorical column transformer
-        self.num_cat_trans = ColumnTransformer(
-            transformers=[
-                ("num", self.num_trans, self.feat_num_cols),
-                ("cat", self.cat_trans, self.feat_cat_cols),
-            ]
-        )
+        X_ = X.copy()
+        if isinstance(X, pd.Series):  # Convert Series to Dataframe
+            print("[AstypeTrans]: Converting pandas series to dataframe")
+            X_ = X_.to_frame()
+        ### Do not change this ###
 
-        # Adding new features, deleting unwanted features....
-        self.feat_eng = Pipeline(
-            [
-                ("add_feat", self.add_feat),
-            ]
-        )
+        for key, val in self.col_type_dict.items():
+            X_[key] = X_[key].astype(val)
 
-        self.imputer = ColumnTransformer(
-            [
-                ("imputer_num", SimpleImputer(strategy="median"), self.num_cols),
-                ("imputer_cat", SimpleImputer(strategy="most_frequent"), self.cat_cols),
-            ]
-        )
+        return X_
 
-        self.clean_pipe = Pipeline(
-            [
-                ("imputer", self.imputer)
-                # ('date_parser', self.data_parser)
-            ]
-        )
 
-        self.preprocessor = Pipeline(
-            [
-                ("clean", self.clean_pipe),
-                ("feature_eng", self.feat_eng),
-                ("num_cat", self.num_cat_trans),
-            ]
-        )
+class ParseDateTrans(BaseEstimator, TransformerMixin):
+    def __init__(self, date_colname):
+        self.date_colname = date_colname
+
+    def fit(self, X, y=None):
+        print("[ParseDateTrans]: fit()")
+        return self
+
+    def transform(self, X, y=None):
+        ### Do not change this ###
+        print("[ParseDateTrans]: transform()")
+
+        X_ = X.copy()
+        if isinstance(X, pd.Series):  # Convert Series to Dataframe
+            print("[ParseDateTrans]: Converting pandas series to dataframe")
+            X_ = X_.to_frame()
+        ### Do not change this ###
+
+        X_["DateParsed"] = pd.to_datetime(X_[self.date_colname], format="%d/%m/%Y")
+        X_["DateParsedYear"] = X_["DateParsed"].dt.year
+        X_["DateParsedMonth"] = X_["DateParsed"].dt.month
+
+        X_.drop(["Date", "DateParsed"], axis=1, inplace=True)
+        return X_
+
+
+### Date Analytics Transformers ###
+class DataBinning(BaseEstimator, TransformerMixin):
+    def __init__(self, bin_info=None):
+        self.bin_info = bin_info
+
+    def fit(self, X, y=None):
+        print("[DataBinning]: fit()")
+        if self.bin_info == None:
+            print("[DataBinning]: auto binning...")
+        return self
+
+    def transform(self, X, y=None):
+        print("[DataBinning]: transform()")
+        X_ = X.copy()
+
+        for colname, bins, labels, dtype in self.bin_info:
+            X_[f"{colname}Bin"] = pd.cut(X_[colname], bins=bins, labels=labels).astype(
+                dtype
+            )
+            X_.drop([colname], axis=1, inplace=True)
+
+        return X_
+
+
+class AddDropFeatBase(BaseEstimator, TransformerMixin):
+    def __init__(self, add_colnames, del_colnames):
+        self.add_colnames = add_colnames
+        self.del_colnames = del_colnames
+
+    def fit(self, X, y=None):
+        return self
+
+    def drop_cols(self, X):
+        X.drop(self.del_colnames, axis=1, inplace=True)
+
+    def transform(self, X, y=None):
+        raise NotImplementedError("Please rewrite [AddDropFeatBase] transform method!")
+
+
+class AddDropFeat(AddDropFeatBase):
+    def __init__(self, add_colnames=None, del_colnames=None):
+        AddDropFeatBase.__init__(self, add_colnames, del_colnames)
+        self.add_colnames = add_colnames
+        self.del_colnames = del_colnames
+
+    def fit(self, X, y=None):
+        print("[AddDropFeat]: fit()")
+        return self
+
+    def transform(self, X):
+        print("[AddDropFeat]: transform()")
+        X_ = X.copy()
+
+        self.drop_cols(X_)
+        return X_
+
+
+### Encoder Transformers ###
+class HighCardAggregation(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        pass
+
+    def fit(self, X, y=None):
+        print("[HighCardAggregation]: fit()")
+        return self
+
+    def transform(self, X, y=None):
+        print("[HighCardAggregation]: transform()")
+        X_ = X.copy()
+
+        for col in list(X_.columns):
+            X_[col], trans_list = pipelinetools_helper.cumulatively_categorise(
+                column=X_[col], threshold=0.75
+            )
+
+        return X_
