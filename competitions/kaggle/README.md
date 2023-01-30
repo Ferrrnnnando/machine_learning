@@ -4,6 +4,7 @@
 
 ### Regression
 1. [Melbourne-Housing](Melbourne-Housing/Melbourne-Housing.ipynb)
+2. [Automobile-Price-Prediction](Automobile-Price-Prediction/automobile-price-prediction.ipynb)
 
 ### Classification
 1. [Titanic](Titanic/titanic.ipynb)
